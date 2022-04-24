@@ -1,0 +1,72 @@
+#!/bin/bash
+
+#SOFTWARE DEPENDENCIES
+export ANTSPATH=/opt/ANTs/bin/
+export PATH=${ANTSPATH}:$PATH
+
+cd rawdata
+for i in sub*; do
+echo $i
+
+mkdir ../subjects/${i}
+mkdir ../subjects/${i}/ses-preop
+mkdir ../subjects/${i}/ses-preop/anat
+mkdir ../subjects/${i}/ses-preop/dwi
+mkdir ../subjects/${i}/ses-postop
+mkdir ../subjects/${i}/ses-postop/anat
+mkdir ../subjects/${i}/ses-postop/dwi
+
+
+#BIDS THE PREOP T1W (in preop CTA space)
+cp ${i}/t1_reg.nii.gz ../subjects/${i}/ses-preop/anat/${i}_ses-preop_T1w.nii.gz
+
+#BIDS THE PREOP T1W with contrast (in preop CTA space)
+cp ${i}/t1c_reg.nii.gz ../subjects/${i}/ses-preop/anat/${i}_ses-preop_T1w_contrast.nii.gz
+
+#BIDS THE PREOP FLAIR (in preop CTA space)
+cp ${i}/flair_reg.nii.gz ../subjects/${i}/ses-preop/anat/${i}_ses-preop_FLAIR.nii.gz
+
+#BIDS THE POSTOP T1W (in preop CTA space)
+cp ${i}/postop_reg.nii.gz ../subjects/${i}/ses-postop/anat/${i}_ses-postop_T1w.nii.gz
+
+#BIDS THE RESECTION MASK FROM POSTOP T1W (in preop CTA space)
+cp ${i}/resection_reg.nii.gz ../subjects/${i}/ses-postop/anat/${i}_ses-postop_resection_ROI.nii.gz
+
+#BIDS THE ELECTRODES
+cd ${i}/ElectrodesTransformed_images
+for j in *; do
+cp ${j} ../../../subjects/${i}/ses-preop/anat/${i}_ses-preop_electrode_${j}
+done
+cd ../..
+
+
+
+#NORMALISE THE DATA
+cd ../
+
+#T1
+antsRegistrationSyNQuick.sh -d 3 -f ../template_brain/nihpd_sym_04.5-18.5_nifti/nihpd_sym_04.5-18.5_t1w.nii -m subjects/${i}/ses-preop/anat/${i}_ses-preop_T1w.nii.gz -o subjects/${i}/ses-preop/anat/${i}_ses-preop_T1w_normalised -t s -n 12
+
+#T1c
+antsApplyTransforms -d 3 -i subjects/${i}/ses-preop/anat/${i}_ses-preop_T1w_contrast.nii.gz -r ../template_brain/nihpd_sym_04.5-18.5_nifti/nihpd_sym_04.5-18.5_t1w.nii -t subjects/${i}/ses-preop/anat/${i}_ses-preop_T1w_normalised1Warp.nii.gz -t [ subjects/${i}/ses-preop/anat/${i}_ses-preop_T1w_normalised0GenericAffine.mat ]  -o subjects/${i}/ses-preop/anat/${i}_ses-preop_T1w_contrast_normalised.nii.gz
+
+#FLAIR
+antsApplyTransforms -d 3 -i subjects/${i}/ses-preop/anat/${i}_ses-preop_FLAIR.nii.gz -r ../template_brain/nihpd_sym_04.5-18.5_nifti/nihpd_sym_04.5-18.5_t1w.nii -t subjects/${i}/ses-preop/anat/${i}_ses-preop_T1w_normalised1Warp.nii.gz -t [ subjects/${i}/ses-preop/anat/${i}_ses-preop_T1w_normalised0GenericAffine.mat ]  -o subjects/${i}/ses-preop/anat/${i}_ses-preop_FLAIR_normalised.nii.gz
+
+#POSTOP T1W MRI
+antsApplyTransforms -d 3 -i subjects/${i}/ses-postop/anat/${i}_ses-postop_T1W.nii.gz -r ../template_brain/nihpd_sym_04.5-18.5_nifti/nihpd_sym_04.5-18.5_t1w.nii -t subjects/${i}/ses-preop/anat/${i}_ses-preop_T1w_normalised1Warp.nii.gz -t [ subjects/${i}/ses-preop/anat/${i}_ses-preop_T1w_normalised0GenericAffine.mat ]  -o subjects/${i}/ses-postop/anat/${i}_ses-postop_T1W_normalised.nii.gz
+
+#RESECTION CAVITY
+antsApplyTransforms -d 3 -i subjects/${i}/ses-postop/anat/${i}_ses-postop_resection_ROI.nii.gz -r ../template_brain/nihpd_sym_04.5-18.5_nifti/nihpd_sym_04.5-18.5_t1w.nii -t subjects/${i}/ses-preop/anat/${i}_ses-preop_T1w_normalised1Warp.nii.gz -t [ subjects/${i}/ses-preop/anat/${i}_ses-preop_T1w_normalised0GenericAffine.mat ]  -o subjects/${i}/ses-postop/anat/${i}_ses-postop_resection_ROI_normalised.nii.gz
+
+#ELECTRODES
+
+cd subjects/${i}/ses-preop/anat/
+for j in ${i}_ses-preop_electrode*; do
+echo $j
+antsApplyTransforms -d 3 -i ${j} -r ../../../../../template_brain/nihpd_sym_04.5-18.5_nifti/nihpd_sym_04.5-18.5_t1w.nii -t ${i}_ses-preop_T1w_normalised1Warp.nii.gz -t [ ${i}_ses-preop_T1w_normalised0GenericAffine.mat ]  -o ${j%.nii.gz}_normalised.nii.gz -n NearestNeighbor 
+done
+
+done 
+
+echo Process Complete
